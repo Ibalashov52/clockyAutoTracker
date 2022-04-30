@@ -1,0 +1,94 @@
+version: '2.4'
+
+services:
+  app:
+    build:
+      context: ../
+      dockerfile: ./docker/php-fpm/Dockerfile
+    image: backend_app
+    volumes:
+      - ../App:/application
+
+  webserver:
+    image: 'nginx:1.17.9-alpine'
+    working_dir: /application
+    volumes:
+      - ../App:/application
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - "127.0.0.1:${NGINX_PORT}:80"
+
+  pgbouncer-writer:
+    image: 'edoburu/pgbouncer:1.15.0'
+    environment:
+      - DB_USER=${POSTGRESQL_USERNAME}
+      - DB_PASSWORD=${POSTGRESQL_PASSWORD}
+      - DB_HOST=postgresql-master
+      - DB_NAME=${POSTGRESQL_DATABASE}
+      # задает режим работы
+      # доступные значения:
+      # - session -  одно постгрес-подключение на всё время, пока клиент остаётся подключённым
+      # - transaction - одно постгрес-подключение на время транзакции
+      # - statement - постгрес-подключение будет возвращаться в пул сразу после завершения каждого запроса.
+      #   Транзакции с несколькими операторами не будут работать
+      - POOL_MODE=session
+      - ADMIN_USERS=${POSTGRESQL_USERNAME}
+    ports:
+      - '127.0.0.1:${PGBOUNCER_WRITER_PORT}:5432'
+    depends_on:
+      - postgresql-master
+
+  pgbouncer-reader:
+    image: 'edoburu/pgbouncer:1.15.0'
+    environment:
+      - DB_USER=${POSTGRESQL_USERNAME}
+      - DB_PASSWORD=${POSTGRESQL_PASSWORD}
+      - DB_HOST=postgresql-slave
+      - DB_NAME=${POSTGRESQL_DATABASE}
+      - POOL_MODE=session
+      - ADMIN_USERS=${POSTGRESQL_USERNAME}
+    ports:
+      - '127.0.0.1:${PGBOUNCER_READER_PORT}:5432'
+    depends_on:
+      - postgresql-slave
+
+  postgresql-master:
+    image: 'bitnami/postgresql:13.6.0'
+    volumes:
+      - 'postgresql_master_data:/bitnami/postgresql'
+    ports:
+      - '${POSTGRESQL_PORT}:5432'
+    environment:
+      POSTGRESQL_REPLICATION_MODE: master
+      POSTGRESQL_REPLICATION_USER: repl_user
+      POSTGRESQL_REPLICATION_PASSWORD: repl_pass
+      POSTGRESQL_USERNAME: ${POSTGRESQL_USERNAME}
+      POSTGRESQL_PASSWORD: ${POSTGRESQL_PASSWORD}
+      POSTGRESQL_DATABASE: ${POSTGRESQL_DATABASE}
+      # включить, если есть необходимость гарантировать актуальность данных slave
+      # пагубно сказывается на производительности операций записи
+      POSTGRESQL_SYNCHRONOUS_COMMIT_MODE: "off"
+
+
+  # асинхронный репликант для распределения нагрузки и отказоустойчивости
+  # увеличивая количество slave-ов можно распределять нагрузку при операциях чтения (sic!)
+  postgresql-slave:
+    image: 'bitnami/postgresql:13.6.0'
+    depends_on:
+      - postgresql-master
+    volumes:
+      - 'postgresql_slave_data:/bitnami/postgresql'
+    ports:
+      - '${POSTGRESQL_SLAVE}:5432'
+    environment:
+      POSTGRESQL_REPLICATION_MODE: slave
+      POSTGRESQL_REPLICATION_USER: repl_user
+      POSTGRESQL_REPLICATION_PASSWORD: repl_pass
+      POSTGRESQL_MASTER_HOST: postgresql-master
+      POSTGRESQL_USERNAME: ${POSTGRESQL_USERNAME}
+      POSTGRESQL_PASSWORD: ${POSTGRESQL_PASSWORD}
+      POSTGRESQL_MASTER_PORT_NUMBER: 5432
+
+volumes:
+  postgresql_master_data:
+  postgresql_slave_data:
