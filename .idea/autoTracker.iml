@@ -125,6 +125,7 @@
       <excludeFolder url="file://$MODULE_DIR$/App/vendor/spatie/data-transfer-object" />
       <excludeFolder url="file://$MODULE_DIR$/App/vendor/shalvah/clara" />
       <excludeFolder url="file://$MODULE_DIR$/App/vendor/shalvah/upgrader" />
+      <excludeFolder url="file://$MODULE_DIR$/App/vendor/activecollab/activecollab-feather-sdk" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
